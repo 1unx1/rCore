@@ -2,6 +2,26 @@
 
 use super::TaskContext;
 
+/// Info about syscall times and start time in microsecond of a task
+#[derive(Copy, Clone)]
+pub struct TaskInnerInfo {
+    /// Times of syscall called by task
+    pub syscall_times: [u32; 5],
+    /// Start running time in microsecond of task
+    pub start_time_us: Option<usize>,
+}
+
+impl TaskInnerInfo {
+    /// Zero initialization
+    pub fn zero_init() -> Self {
+        Self {
+            syscall_times: [0; 5],
+            // the task has not started when zero_init()
+            start_time_us: Option::None,
+        }
+    }
+}
+
 /// The task control block (TCB) of a task.
 #[derive(Copy, Clone)]
 pub struct TaskControlBlock {
@@ -9,6 +29,8 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     /// The task context
     pub task_cx: TaskContext,
+    /// The task information, including syscall times and start time
+    pub task_info: TaskInnerInfo,
 }
 
 /// The status of a task
