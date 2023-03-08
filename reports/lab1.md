@@ -29,25 +29,43 @@
 
 1. 我使用的SBI信息：
 
-   ![image-20230307220416873](C:\Users\19652\AppData\Roaming\Typora\typora-user-images\image-20230307220416873.png)
+   ```
+   [rustsbi] RustSBI version 0.3.0-alpha.2, adapting to RISC-V SBI v1.0.0
+   .______       __    __      _______.___________.  _______..______   __
+   |   _  \     |  |  |  |    /       |           | /       ||   _  \ |  |
+   |  |_)  |    |  |  |  |   |   (----`---|  |----`|   (----`|  |_)  ||  |
+   |      /     |  |  |  |    \   \       |  |      \   \    |   _  < |  |
+   |  |\  \----.|  `--'  |.----)   |      |  |  .----)   |   |  |_)  ||  |
+   | _| `._____| \______/ |_______/       |__|  |_______/    |______/ |__|
+   [rustsbi] Implementation     : RustSBI-QEMU Version 0.2.0-alpha.2
+   ```
 
    - ch2b_bad_address.rs
 
      该用户程序对地址`0x0`进行了访问，触发了缺页异常。
 
-     ![image-20230307214756674](C:\Users\19652\AppData\Roaming\Typora\typora-user-images\image-20230307214756674.png)
+     ```
+     [ERROR] [kernel] .bss [0x80250000, 0x80271000)
+     [kernel] PageFault in application, bad addr = 0x0, bad instruction = 0x80400414, kernel killed it.
+     ```
 
    - ch2b_bad_instructions.rs
 
      该用户程序中含有内核态S的特权级指令`sret`，CPU在用户态执行该指令会产生非法指令异常。
 
-     ![image-20230307214906101](C:\Users\19652\AppData\Roaming\Typora\typora-user-images\image-20230307214906101.png)
+     ```
+     [ERROR] [kernel] .bss [0x80250000, 0x80271000)
+     [kernel] IllegalInstruction in application, kernel killed it.
+     ```
 
    - ch2b_bad_register.rs
 
      该用户程序中含有访问内核态S下才能访问的CSR`sstatus`，CPU在用户态执行该指令会产生非法指令异常。
-
-   ![image-20230307214943115](C:\Users\19652\AppData\Roaming\Typora\typora-user-images\image-20230307214943115.png)
+     
+     ```
+     [ERROR] [kernel] .bss [0x80250000, 0x80271000)
+     [kernel] IllegalInstruction in application, kernel killed it.
+     ```
 
 2. (1)
 

@@ -2,7 +2,8 @@
 
 use super::TaskContext;
 
-/// Info about syscall times and start time in microsecond of a task
+/// Info about syscall times and start time in microsecond of a task,
+/// refer to hint of https://learningos.github.io/rCore-Tutorial-Guide-2023S/chapter3/5exercise.html
 #[derive(Copy, Clone)]
 pub struct TaskInnerInfo {
     /// Times of syscall called by task
