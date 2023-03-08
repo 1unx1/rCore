@@ -6,24 +6,24 @@
 
 ##### 定义
 
-我定义了一个结构体`TaskInnerInfo`保存了某任务的：
+定义了一个结构体`TaskInnerInfo`保存某任务的：
 
 - 各个系统调用次数；
 - 第一次被调度时刻。
 
-为它实现了方法`zero_init`用于初始化，将系统调用次数设置为0，第一次被调度时刻设置为`Option::None`。
+方法`zero_init`将系统调用次数设置为0，第一次被调度时刻设置为`Option::None`。
 
 ##### 维护
 
-我将这个结构体添加到了`TaskControlBlock`的成员中，用于保存该任务的这些信息，具体维护操作为：
+在`TaskControlBlock`中添加`TaskInnerInfo`成员，具体维护操作为：
 
-- 当某任务在`run_first_task`或`run_next_task`中第一次被调度（通过判断是否为`Option::None`来判断是否是第一次）时，用`get_time_us`将被调度时刻记录下来；
+- 当某任务在`run_first_task`或`run_next_task`中第一次被调度时，用`get_time_us`获得被调度时刻并保存；
 
-- 在进入`trap_handler`之后，调用`syscall`之前，通过新增的方法和函数（`TaskManager.update_current_syscall_times`和`update_current_syscall_times`），更新对应的系统调用次数。
+- 在进入`trap_handler`后，调用`syscall`前，通过接口`update_current_syscall_times`，更新系统调用次数。
 
 ##### 使用
 
-当发生`sys_task_info`系统调用时，该系统调用函数会通过新增的方法和函数（`TaskManager.get_current_info`和`get_current_info`），获取该任务的`TaskInnerInfo`。再由`get_time_us`获取当前时刻，就获得了足够的信息以构造出所需的`TaskInfo`实例。
+`sys_task_info`通过接口`get_current_info`，获取当前任务的`TaskInnerInfo`，通过`get_time_us`获取当前时刻，由二者构造出所需的`TaskInfo`实例。
 
 #### 简答作业
 
