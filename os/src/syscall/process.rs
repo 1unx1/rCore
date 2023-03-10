@@ -1,8 +1,9 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    syscall::{SYSCALL_EXIT, SYSCALL_GET_TIME, SYSCALL_TASK_INFO, SYSCALL_WRITE, SYSCALL_YIELD},
-    task::{exit_current_and_run_next, get_current_info, suspend_current_and_run_next, TaskStatus},
+    task::{
+        exit_current_and_run_next, get_current_inner_info, suspend_current_and_run_next, TaskStatus,
+    },
     timer::get_time_us,
 };
 
@@ -54,22 +55,18 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    let task_info = get_current_info();
-    if let Some(start_time) = task_info.start_time_us {
+    if let Some(task_inner_info) = get_current_inner_info() {
         unsafe {
             *_ti = TaskInfo {
-                // current task must be 'Running'
                 status: TaskStatus::Running,
                 syscall_times: {
-                    let mut syscall_info: [u32; MAX_SYSCALL_NUM] = [0; MAX_SYSCALL_NUM];
-                    syscall_info[SYSCALL_WRITE] = task_info.syscall_times[0];
-                    syscall_info[SYSCALL_EXIT] = task_info.syscall_times[1];
-                    syscall_info[SYSCALL_YIELD] = task_info.syscall_times[2];
-                    syscall_info[SYSCALL_GET_TIME] = task_info.syscall_times[3];
-                    syscall_info[SYSCALL_TASK_INFO] = task_info.syscall_times[4];
-                    syscall_info
+                    let mut syscalls = [0; MAX_SYSCALL_NUM];
+                    for (syscall_id, times) in &task_inner_info.0 {
+                        syscalls[*syscall_id] = *times;
+                    }
+                    syscalls
                 },
-                time: (get_time_us() - start_time) / 1000,
+                time: (get_time_us() - task_inner_info.1) / 1000,
             };
         }
         0

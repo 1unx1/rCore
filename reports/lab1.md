@@ -6,24 +6,22 @@
 
 ##### 定义
 
-定义了一个结构体`TaskInnerInfo`保存某任务的：
+定义了`TaskInnerInfo`保存某任务的内部信息：
 
-- 各个系统调用次数；
+- 各个系统调用次数（以`BTreeMap`保存）；
 - 第一次被调度时刻。
-
-方法`zero_init`将系统调用次数设置为0，第一次被调度时刻设置为`Option::None`。
 
 ##### 维护
 
-在`TaskControlBlock`中添加`TaskInnerInfo`成员，具体维护操作为：
+在`TaskManagerInner`中添加`Vec<(usize, TaskInnerInfo)>`成员，保存各任务的任务号和内部信息：
 
-- 当某任务在`run_first_task`或`run_next_task`中第一次被调度时，用`get_time_us`获得被调度时刻并保存；
+- 当某任务第一次被调度（`run_first_task`或`run_next_task`），用`get_time_us`获取被调度时刻，将其内部信息添加到`Vec`中；
 
-- 在进入`trap_handler`后，调用`syscall`前，通过接口`update_current_syscall_times`，更新系统调用次数。
+- 在进入`trap_handler`后，调用`syscall`前，通过接口`update_current_syscall_times`，更新当前任务的系统调用次数。
 
 ##### 使用
 
-`sys_task_info`通过接口`get_current_info`，获取当前任务的`TaskInnerInfo`，通过`get_time_us`获取当前时刻，由二者构造出所需的`TaskInfo`实例。
+`sys_task_info`通过接口`get_current_inner_info`，获取当前任务的内部信息，通过`get_time_us`获取当前时刻，构造出所需的`TaskInfo`实例。
 
 #### 简答作业
 

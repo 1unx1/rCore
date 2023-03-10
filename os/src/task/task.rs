@@ -1,24 +1,23 @@
 //! Types related to task management
 
 use super::TaskContext;
+use alloc::collections::BTreeMap;
 
-/// Info about syscall times and start time in microsecond of a task,
-/// refer to hint of https://learningos.github.io/rCore-Tutorial-Guide-2023S/chapter3/5exercise.html
-#[derive(Copy, Clone)]
+/// Info about syscall times and start time in microsecond of a task
+#[derive(Clone)]
 pub struct TaskInnerInfo {
     /// Times of syscall called by task
-    pub syscall_times: [u32; 5],
+    pub syscall_times: BTreeMap<usize, u32>,
     /// Start running time in microsecond of task
-    pub start_time_us: Option<usize>,
+    pub start_time_us: usize,
 }
 
 impl TaskInnerInfo {
-    /// Zero initialization
-    pub fn zero_init() -> Self {
+    /// Called when a task runs for the first time
+    pub fn zero_init(time_us: usize) -> Self {
         Self {
-            syscall_times: [0; 5],
-            // the task has not started when zero_init()
-            start_time_us: Option::None,
+            syscall_times: BTreeMap::new(),
+            start_time_us: time_us,
         }
     }
 }
@@ -30,8 +29,6 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     /// The task context
     pub task_cx: TaskContext,
-    /// The task information, including syscall times and start time
-    pub task_info: TaskInnerInfo,
 }
 
 /// The status of a task
