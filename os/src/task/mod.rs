@@ -160,7 +160,7 @@ impl TaskManager {
         }
     }
 
-    /// Update syscall info of the current 'Running' task
+    /// Update syscall times of the current 'Running' task
     fn update_current_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -176,7 +176,7 @@ impl TaskManager {
         }
     }
 
-    /// Return info of current 'Running' task
+    /// Return inner info of current 'Running' task
     fn get_current_inner_info(&self) -> Option<(Vec<(usize, u32)>, usize)> {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;

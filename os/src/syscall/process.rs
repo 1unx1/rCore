@@ -60,7 +60,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
             *_ti = TaskInfo {
                 status: TaskStatus::Running,
                 syscall_times: {
-                    let mut syscalls = [0; MAX_SYSCALL_NUM];
+                    let mut syscalls: [u32; MAX_SYSCALL_NUM] = [0; MAX_SYSCALL_NUM];
                     for (syscall_id, times) in &task_inner_info.0 {
                         syscalls[*syscall_id] = *times;
                     }
