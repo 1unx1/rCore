@@ -53,7 +53,6 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
                                // trace!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
-            // update syscall times of current 'Running' task
             update_current_syscall_times(cx.x[17]);
             // jump to next instruction anyway
             cx.sepc += 4;

@@ -13,15 +13,15 @@
 
 ##### 维护
 
-在`TaskManagerInner`中添加`Vec<(usize, TaskInnerInfo)>`成员`task_inner_info_list`，保存各任务的任务号和内部信息：
+在`TaskManagerInner`中添加`Vec<TaskInnerInfo>`成员`task_inner_info_list`，保存各任务的内部信息：
 
-- 当某任务第一次被调度（`run_first_task`或`run_next_task`），用`get_time_us`获取被调度时刻，将其内部信息添加到`Vec`中；
+- 当某任务第一次被调度（`run_first_task`或`run_next_task`），用`get_time_us`获取被调度时刻，通过方法`save_start_time_us`将其保存；
 
 - 在进入`trap_handler`后，调用`syscall`前，通过接口`update_current_syscall_times`，更新当前任务的系统调用次数。
 
 ##### 使用
 
-`sys_task_info`通过接口`get_current_inner_info`，获取当前任务的内部信息，通过`get_time_us`获取当前时刻，构造出所需的`TaskInfo`实例。
+`sys_task_info`通过接口`get_current_inner_info`，获取当前任务的内部信息，通过`get_time_us`获取当前时刻，从而构造出所需的`TaskInfo`实例。
 
 #### 简答作业
 

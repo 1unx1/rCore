@@ -1,24 +1,31 @@
 //! Types related to task management
 
+use crate::timer::get_time_us;
+
 use super::TaskContext;
 use alloc::collections::BTreeMap;
 
-/// Info about syscall times and start time in microsecond of a task
+/// Info about syscall times and start time in usec of a task
 #[derive(Clone)]
 pub struct TaskInnerInfo {
     /// Times of syscall called by task
     pub syscall_times: BTreeMap<usize, u32>,
-    /// Start running time in microsecond of task
-    pub start_time_us: usize,
+    /// Start running time in usec of task
+    pub start_time_us: Option<usize>,
 }
 
 impl TaskInnerInfo {
-    /// Called when a task runs for the first time
-    pub fn zero_init(time_us: usize) -> Self {
+    /// Initialize `start_time_us` with `None`,
+    /// which means the task hasn't started
+    pub fn zero_init() -> Self {
         Self {
             syscall_times: BTreeMap::new(),
-            start_time_us: time_us,
+            start_time_us: None,
         }
+    }
+    /// Save start time in usec
+    pub fn save_start_time_us(&mut self) {
+        self.start_time_us = Some(get_time_us());
     }
 }
 

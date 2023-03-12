@@ -55,18 +55,19 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    if let Some(task_inner_info) = get_current_inner_info() {
+    let inner_info = get_current_inner_info();
+    if let Some(start_time) = inner_info.1 {
         unsafe {
             *_ti = TaskInfo {
                 status: TaskStatus::Running,
                 syscall_times: {
-                    let mut syscalls: [u32; MAX_SYSCALL_NUM] = [0; MAX_SYSCALL_NUM];
-                    for (syscall_id, times) in &task_inner_info.0 {
-                        syscalls[*syscall_id] = *times;
+                    let mut syscall_times: [u32; MAX_SYSCALL_NUM] = [0; MAX_SYSCALL_NUM];
+                    for (syscall_id, times) in &inner_info.0 {
+                        syscall_times[*syscall_id] = *times;
                     }
-                    syscalls
+                    syscall_times
                 },
-                time: (get_time_us() - task_inner_info.1) / 1000,
+                time: (get_time_us() - start_time) / 1000,
             };
         }
         0

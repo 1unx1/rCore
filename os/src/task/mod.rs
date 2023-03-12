@@ -17,7 +17,6 @@ mod task;
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
-use crate::timer::get_time_us;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -47,10 +46,9 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
-    /// task inner info list,
-    /// I use Vec of BTreeMap,
+    /// task inner info list, I use Vec of BTreeMap,
     /// due to hint of https://learningos.github.io/rCore-Tutorial-Guide-2023S/chapter3/5exercise.html
-    task_inner_info_list: Vec<(usize, TaskInnerInfo)>,
+    task_inner_info_list: Vec<TaskInnerInfo>,
 }
 
 lazy_static! {
@@ -71,7 +69,13 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
-                    task_inner_info_list: Vec::new(),
+                    task_inner_info_list: {
+                        let mut info_list = Vec::new();
+                        for _ in 0..MAX_APP_NUM{
+                            info_list.push(TaskInnerInfo::zero_init());
+                        }
+                        info_list
+                    },
                 })
             },
         }
@@ -89,9 +93,7 @@ impl TaskManager {
         task0.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         // run the task for the first time
-        inner
-            .task_inner_info_list
-            .push((0, TaskInnerInfo::zero_init(get_time_us())));
+        inner.task_inner_info_list[0].save_start_time_us();
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -137,17 +139,8 @@ impl TaskManager {
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             // run the task for the first time
-            let mut first_time = true;
-            for task_inner_info in &inner.task_inner_info_list {
-                if task_inner_info.0 == next {
-                    first_time = false;
-                    break;
-                }
-            }
-            if first_time {
-                inner
-                    .task_inner_info_list
-                    .push((next, TaskInnerInfo::zero_init(get_time_us())));
+            if inner.task_inner_info_list[next].start_time_us.is_none() {
+                inner.task_inner_info_list[next].save_start_time_us();
             }
             drop(inner);
             // before this, we should drop local variables that must be dropped manually
@@ -160,36 +153,34 @@ impl TaskManager {
         }
     }
 
-    /// Update syscall times of the current 'Running' task
+    /// Update syscall times of current `Running` task
     fn update_current_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        for task_inner_info in &mut inner.task_inner_info_list {
-            if task_inner_info.0 == current {
-                if let Some(times) = task_inner_info.1.syscall_times.get_mut(&syscall_id) {
-                    *times += 1;
-                } else {
-                    task_inner_info.1.syscall_times.insert(syscall_id, 1);
-                }
-                break;
-            }
+        if let Some(times) = inner.task_inner_info_list[current]
+            .syscall_times
+            .get_mut(&syscall_id)
+        {
+            *times += 1;
+        } else {
+            inner.task_inner_info_list[current]
+                .syscall_times
+                .insert(syscall_id, 1);
         }
     }
 
-    /// Return inner info of current 'Running' task
-    fn get_current_inner_info(&self) -> Option<(Vec<(usize, u32)>, usize)> {
+    /// Get inner info of current `Running` task
+    fn get_current_inner_info(&self) -> (Vec<(usize, u32)>, Option<usize>) {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        for task_inner_info in &inner.task_inner_info_list {
-            if task_inner_info.0 == current {
-                let mut syscall_times: Vec<(usize, u32)> = Vec::new();
-                for (syscall_id, times) in &task_inner_info.1.syscall_times {
-                    syscall_times.push((*syscall_id, *times));
-                }
-                return Some((syscall_times, task_inner_info.0));
-            }
+        let mut syscall_times: Vec<(usize, u32)> = Vec::new();
+        for (syscall_id, times) in &inner.task_inner_info_list[current].syscall_times {
+            syscall_times.push((*syscall_id, *times));
         }
-        None
+        (
+            syscall_times,
+            inner.task_inner_info_list[current].start_time_us,
+        )
     }
 }
 
@@ -214,24 +205,24 @@ fn mark_current_exited() {
     TASK_MANAGER.mark_current_exited();
 }
 
-/// Suspend the current 'Running' task and run the next task in task list.
+/// Suspend the current `Running` task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
     mark_current_suspended();
     run_next_task();
 }
 
-/// Exit the current 'Running' task and run the next task in task list.
+/// Exit the current `Running` task and run the next task in task list.
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
 }
 
-/// Update syscall times of the current 'Running' task
+/// Update syscall times of current `Running` task
 pub fn update_current_syscall_times(syscall_id: usize) {
     TASK_MANAGER.update_current_syscall_times(syscall_id);
 }
 
-/// Return inner info of current 'Running' task
-pub fn get_current_inner_info() -> Option<(Vec<(usize, u32)>, usize)> {
+/// Get inner info of current `Running` task
+pub fn get_current_inner_info() -> (Vec<(usize, u32)>, Option<usize>) {
     TASK_MANAGER.get_current_inner_info()
 }
