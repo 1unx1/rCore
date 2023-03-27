@@ -4,7 +4,33 @@ use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{
     kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
+use crate::timer::get_time_us;
 use crate::trap::{trap_handler, TrapContext};
+use alloc::collections::BTreeMap;
+
+/// Info about syscall times and start time in usec of a task
+#[derive(Clone)]
+pub struct TaskInnerInfo {
+    /// Times of syscall called by task
+    pub syscall_times: BTreeMap<usize, u32>,
+    /// Start running time in usec of task
+    pub start_time_us: Option<usize>,
+}
+
+impl TaskInnerInfo {
+    /// Initialize `start_time_us` with `None`,
+    /// which means the task hasn't started
+    pub fn zero_init() -> Self {
+        Self {
+            syscall_times: BTreeMap::new(),
+            start_time_us: None,
+        }
+    }
+    /// Save start time in usec
+    pub fn save_start_time_us(&mut self) {
+        self.start_time_us = Some(get_time_us());
+    }
+}
 
 /// The task control block (TCB) of a task.
 pub struct TaskControlBlock {

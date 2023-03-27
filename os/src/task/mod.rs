@@ -15,12 +15,13 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
-pub use task::{TaskControlBlock, TaskStatus};
+pub use task::{TaskControlBlock, TaskInnerInfo, TaskStatus};
 
 pub use context::TaskContext;
 
@@ -46,6 +47,9 @@ struct TaskManagerInner {
     tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
     current_task: usize,
+    /// task inner info list, I use Vec of BTreeMap,
+    /// due to hint of https://learningos.github.io/rCore-Tutorial-Guide-2023S/chapter3/5exercise.html
+    task_inner_info_list: Vec<TaskInnerInfo>,
 }
 
 lazy_static! {
@@ -64,6 +68,13 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    task_inner_info_list: {
+                        let mut info_list = Vec::new();
+                        for _ in 0..num_app{
+                            info_list.push(TaskInnerInfo::zero_init());
+                        }
+                        info_list
+                    },
                 })
             },
         }
@@ -80,6 +91,8 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        // run the task for the first time
+        inner.task_inner_info_list[0].save_start_time_us();
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -143,6 +156,10 @@ impl TaskManager {
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
+            // run the task for the first time
+            if inner.task_inner_info_list[next].start_time_us.is_none() {
+                inner.task_inner_info_list[next].save_start_time_us();
+            }
             drop(inner);
             // before this, we should drop local variables that must be dropped manually
             unsafe {
@@ -152,6 +169,94 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// Update syscall times of current `Running` task
+    fn update_current_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if let Some(times) = inner.task_inner_info_list[current]
+            .syscall_times
+            .get_mut(&syscall_id)
+        {
+            *times += 1;
+        } else {
+            inner.task_inner_info_list[current]
+                .syscall_times
+                .insert(syscall_id, 1);
+        }
+    }
+
+    /// Get inner info of current `Running` task
+    fn get_current_inner_info(&self) -> (Vec<(usize, u32)>, Option<usize>) {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let mut syscall_times: Vec<(usize, u32)> = Vec::new();
+        for (syscall_id, times) in &inner.task_inner_info_list[current].syscall_times {
+            syscall_times.push((*syscall_id, *times));
+        }
+        (
+            syscall_times,
+            inner.task_inner_info_list[current].start_time_us,
+        )
+    }
+
+    /// Try mapping a contiguous piece of virtual memory [`start`, `end`),
+    /// both `start` and `end` are aligned to `PAGE_SIZE`
+    fn mmap_from_to(&self, start: usize, end: usize, port: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        // VA: [start_va, end_va) <-> VPN: [start_va.floor(), end_va.ceil())
+        let start_va: VirtAddr = start.into();
+        let end_va: VirtAddr = end.into();
+        // check if this piece of memory has been mapped
+        for vpn in start_va.floor().0..end_va.ceil().0 {
+            if let Some(pte) = inner.tasks[current].memory_set.translate(vpn.into()) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, {
+                let mut map_perm = MapPermission::U;
+                if port & 1 != 0 {
+                    map_perm |= MapPermission::R;
+                }
+                if port & 2 != 0 {
+                    map_perm |= MapPermission::W;
+                }
+                if port & 4 != 0 {
+                    map_perm |= MapPermission::X;
+                }
+                map_perm
+            });
+        0
+    }
+
+    /// Try unmapping a contiguous piece of virtual memory [`start`, `end`),
+    /// both `start` and `end` are aligned to `PAGE_SIZE`
+    fn munmap_from_to(&self, start: usize, end: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        // VA: [start_va, end_va) <-> VPN: [start_va.floor(), end_va.ceil())
+        let start_va: VirtAddr = start.into();
+        let end_va: VirtAddr = end.into();
+        // check if this piece of memory has not been mapped
+        for vpn in start_va.floor().0..end_va.ceil().0 {
+            if let Some(pte) = inner.tasks[current].memory_set.translate(vpn.into()) {
+                if pte.is_valid() == false {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+        }
+        inner.tasks[current]
+            .memory_set
+            .unmap_from_to(start_va, end_va);
+        0
     }
 }
 
@@ -201,4 +306,26 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Update syscall times of current `Running` task
+pub fn update_current_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.update_current_syscall_times(syscall_id);
+}
+
+/// Get inner info of current `Running` task
+pub fn get_current_inner_info() -> (Vec<(usize, u32)>, Option<usize>) {
+    TASK_MANAGER.get_current_inner_info()
+}
+
+/// Try mapping a contiguous piece of virtual memory from `start`, with length = `len`,
+/// both `start` and `len` are aligned to `PAGE_SIZE`
+pub fn mmap(start: usize, len: usize, port: usize) -> isize {
+    TASK_MANAGER.mmap_from_to(start, start + len, port)
+}
+
+/// Try unmapping a contiguous piece of virtual memory from `start`, with length = `len`
+/// `start` must be aligned to `PAGE_SIZE`
+pub fn munmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.munmap_from_to(start, start + len)
 }
