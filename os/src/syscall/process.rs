@@ -59,6 +59,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         copy(src, buffers[0].as_mut_ptr(), buffers[0].len());
     }
     if buffers.len() != 1 {
+        // splitted by 2 pages
         unsafe {
             copy(
                 src.add(buffers[0].len()),
@@ -98,6 +99,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
             copy(src, buffers[0].as_mut_ptr(), buffers[0].len());
         }
         if buffers.len() != 1 {
+            // splitted by 2 pages
             unsafe {
                 copy(
                     src.add(buffers[0].len()),
@@ -124,7 +126,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_munmap");
     if _start % PAGE_SIZE == 0 {
         munmap(_start, _len)
     } else {

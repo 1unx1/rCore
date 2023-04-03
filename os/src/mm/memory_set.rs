@@ -295,7 +295,6 @@ impl MemorySet {
         }) {
             area.shrink_with_new_start(&mut self.page_table, end.ceil());
         }
-        // case 4
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
