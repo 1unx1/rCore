@@ -27,4 +27,4 @@ pub const MEMORY_END: usize = 0x88000000;
 /// default priority of stride scheduling algorithm
 pub const DEFAULT_PRIORITY: isize = 16;
 /// a big stride
-pub const BIG_STRIDE: usize = usize::MAX;
+pub const BIG_STRIDE: usize = 1_000_000_000;
