@@ -73,6 +73,107 @@ impl Inode {
             })
         })
     }
+    /// Link `new_name` at `old_name`.
+    /// That means appending a new dirent with `new_name`,
+    /// it has the same inode id with the dirent with name `old_name`
+    pub fn link_at(&self, old_name: &str, new_name: &str) {
+        let mut fs = self.fs.lock();
+        self.modify_disk_inode(|disk_inode| {
+            if let Some(inode_id) = self.find_inode_id(old_name, disk_inode) {
+                // append a new dirent
+                let dirent_count = (disk_inode.size as usize) / DIRENT_SZ;
+                let new_size = (dirent_count + 1) * DIRENT_SZ;
+                // increase size
+                self.increase_size(new_size as u32, disk_inode, &mut fs);
+                // write dirent
+                let dirent = DirEntry::new(new_name, inode_id);
+                assert_eq!(
+                    disk_inode.write_at(
+                        dirent_count * DIRENT_SZ,
+                        dirent.as_bytes(),
+                        &self.block_device,
+                    ),
+                    DIRENT_SZ
+                );
+            }
+        });
+    }
+    /// Delete a existent dirent with `name`
+    pub fn unlink_at(&self, name: &str) -> isize {
+        self.modify_disk_inode(|disk_inode| {
+            assert!(disk_inode.is_dir());
+            let dirent_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+            for i in 0..dirent_count {
+                assert_eq!(
+                    disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device),
+                    DIRENT_SZ
+                );
+                if dirent.name() == name {
+                    // move dirent at j to j - 1
+                    for j in i + 1..dirent_count {
+                        // read
+                        assert_eq!(
+                            disk_inode.read_at(
+                                DIRENT_SZ * j,
+                                dirent.as_bytes_mut(),
+                                &self.block_device
+                            ),
+                            DIRENT_SZ
+                        );
+                        // write
+                        assert_eq!(
+                            disk_inode.write_at(
+                                DIRENT_SZ * (j - 1),
+                                dirent.as_bytes(),
+                                &self.block_device
+                            ),
+                            DIRENT_SZ
+                        );
+                    }
+                    // decrease size
+                    let new_size = (dirent_count - 1) * DIRENT_SZ;
+                    disk_inode.size = new_size as u32;
+                    return 0;
+                }
+            }
+            -1
+        })
+    }
+    /// Get the inode id and the number of links of file with `name`
+    pub fn get_fstat(&self, name: &str) -> Option<(u32, usize)> {
+        self.read_disk_inode(|disk_inode| {
+            assert!(disk_inode.is_dir());
+            let dirent_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+            for i in 0..dirent_count {
+                assert_eq!(
+                    disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device),
+                    DIRENT_SZ
+                );
+                if dirent.name() == name {
+                    let inode_id = dirent.inode_id();
+                    let mut nlink = 0;
+                    // count the number of links
+                    for j in 0..dirent_count {
+                        assert_eq!(
+                            disk_inode.read_at(
+                                DIRENT_SZ * j,
+                                dirent.as_bytes_mut(),
+                                &self.block_device
+                            ),
+                            DIRENT_SZ
+                        );
+                        if dirent.inode_id() == inode_id {
+                            nlink += 1;
+                        }
+                    }
+                    return Some((inode_id, nlink));
+                }
+            }
+            None
+        })
+    }
     /// Increase the size of a disk inode
     fn increase_size(
         &self,

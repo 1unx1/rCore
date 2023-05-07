@@ -124,6 +124,23 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Link `new_name` at `old_name`.
+/// That means appending a new dirent under ROOT with `new_name`,
+/// it has the same inode id with the dirent with name `old_name`
+pub fn link_at(old_name: &str, new_name: &str) {
+    ROOT_INODE.link_at(old_name, new_name);
+}
+
+/// Delete a existent dirent under ROOT with name
+pub fn unlink_at(name: &str) -> isize {
+    ROOT_INODE.unlink_at(name)
+}
+
+/// Get the inode id and the number of links of file with `name` under ROOT
+pub fn get_fstat(name: &str) -> Option<(u32, usize)> {
+    ROOT_INODE.get_fstat(name)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable

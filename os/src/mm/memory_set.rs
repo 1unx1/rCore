@@ -318,6 +318,40 @@ impl MemorySet {
             false
         }
     }
+
+    /// unmap from `start` to `end`
+    pub fn unmap_from_to(&mut self, start: VirtAddr, end: VirtAddr) {
+        // case 1
+        let mut drop_areas = Vec::new();
+        for (i, area) in self.areas.iter().enumerate() {
+            if area.vpn_range.get_start() >= start.floor() && area.vpn_range.get_end() <= end.ceil()
+            {
+                drop_areas.push(i);
+            }
+        }
+        for i in drop_areas {
+            // unmap in page table
+            self.areas[i].unmap(&mut self.page_table);
+            // dealloc automatically
+            self.areas.remove(i);
+        }
+        // case 2
+        if let Some(area) = self.areas.iter_mut().find(|area| {
+            area.vpn_range.get_start() < start.floor()
+                && start.floor() < area.vpn_range.get_end()
+                && area.vpn_range.get_end() <= end.ceil()
+        }) {
+            area.shrink_with_new_end(&mut self.page_table, start.floor());
+        }
+        // case 3
+        if let Some(area) = self.areas.iter_mut().find(|area| {
+            start.floor() <= area.vpn_range.get_start()
+                && area.vpn_range.get_start() < end.ceil()
+                && end.ceil() < area.vpn_range.get_end()
+        }) {
+            area.shrink_with_new_start(&mut self.page_table, end.ceil());
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -381,6 +415,20 @@ impl MapArea {
         for vpn in self.vpn_range {
             self.unmap_one(page_table, vpn);
         }
+    }
+    #[allow(unused)]
+    pub fn shrink_with_new_end(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
+        for vpn in VPNRange::new(new_end, self.vpn_range.get_end()) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
+    }
+    #[allow(unused)]
+    pub fn shrink_with_new_start(&mut self, page_table: &mut PageTable, new_start: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), new_start) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(new_start, self.vpn_range.get_end());
     }
     #[allow(unused)]
     pub fn shrink_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
