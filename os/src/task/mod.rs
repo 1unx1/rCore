@@ -95,6 +95,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     inner.memory_set.recycle_data_pages();
     // drop file descriptors
     inner.fd_table.clear();
+    inner.name_tb.clear();
     drop(inner);
     // **** release current PCB
     // drop task manually to maintain rc correctly
