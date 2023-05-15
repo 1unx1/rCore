@@ -9,20 +9,15 @@
 1. 实现`Inode::get_fstat`：
    1. 找出名为`name`的目录项，得到`inode_id`。
    2. 遍历各项求`inode_id`出现次数`nlink`。
-
 2. 在进程控制块中新增成员`name_tb`，`name_tb[_fd]`即文件描述符为`_fd`的文件名。
 3. 由`_fd`得到所查文件名，用`ROOT_INODE`调用`get_fstat`得到`inode_id`和`nlink`，构造`Stat`。
 
 ##### sys_linkat
 
 1. 实现`Inode::link_at`：
-
    1. 通过`find_inode_id`找出名为`old_name`的目录项的`inode_id`。
-
    2. 通过`increase_size`以新增一个目录项的空间。
-
    3. 添加新目录项`{new_name, inode_id}`。
-
 2. 用`ROOT_INODE`调用`link_at`。
 
 ##### sys_unlinkat
