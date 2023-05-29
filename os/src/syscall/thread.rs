@@ -3,7 +3,7 @@ use crate::{
     task::{add_task, current_task, TaskControlBlock},
     trap::{trap_handler, TrapContext},
 };
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 /// thread create syscall
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     trace!(
@@ -37,10 +37,62 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     let mut process_inner = process.inner_exclusive_access();
     // add new thread to current process
     let tasks = &mut process_inner.tasks;
+    let mut n = 0;
     while tasks.len() < new_task_tid + 1 {
         tasks.push(None);
+        n += 1;
     }
     tasks[new_task_tid] = Some(Arc::clone(&new_task));
+    for _ in 0..n {
+        process_inner.mutex_alloc.push(None);
+        process_inner.mutex_need.push(None);
+        process_inner.sem_alloc.push(None);
+        process_inner.sem_need.push(None);
+    }
+    process_inner.mutex_alloc[new_task_tid] = Some({
+        let mut vec = Vec::new();
+        for i in 0..process_inner.mutex_list.len() {
+            if process_inner.mutex_list[i].is_some() {
+                vec.push(Some(0));
+            } else {
+                vec.push(None);
+            }
+        }
+        vec
+    });
+    process_inner.mutex_need[new_task_tid] = Some({
+        let mut vec = Vec::new();
+        for i in 0..process_inner.mutex_list.len() {
+            if process_inner.mutex_list[i].is_some() {
+                vec.push(Some(0));
+            } else {
+                vec.push(None);
+            }
+        }
+        vec
+    });
+    process_inner.sem_alloc[new_task_tid] = Some({
+        let mut vec = Vec::new();
+        for i in 0..process_inner.semaphore_list.len() {
+            if process_inner.semaphore_list[i].is_some() {
+                vec.push(Some(0));
+            } else {
+                vec.push(None);
+            }
+        }
+        vec
+    });
+    process_inner.sem_need[new_task_tid] = Some({
+        let mut vec = Vec::new();
+        for i in 0..process_inner.semaphore_list.len() {
+            if process_inner.semaphore_list[i].is_some() {
+                vec.push(Some(0));
+            } else {
+                vec.push(None);
+            }
+        }
+        vec
+    });
     let new_task_trap_cx = new_task_inner.get_trap_cx();
     *new_task_trap_cx = TrapContext::app_init_context(
         entry,
@@ -112,6 +164,10 @@ pub fn sys_waittid(tid: usize) -> i32 {
     if let Some(exit_code) = exit_code {
         // dealloc the exited thread
         process_inner.tasks[tid] = None;
+        process_inner.mutex_alloc[tid] = None;
+        process_inner.mutex_need[tid] = None;
+        process_inner.sem_alloc[tid] = None;
+        process_inner.sem_need[tid] = None;
         exit_code
     } else {
         // waited thread has not exited

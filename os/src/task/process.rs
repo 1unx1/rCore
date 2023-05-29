@@ -49,6 +49,15 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// enable deadlock detection?
+    pub en_deadlock_detect: bool,
+    /// Information for Banker's Algorithm
+    pub mutex_avail: Vec<Option<isize>>,
+    pub mutex_alloc: Vec<Option<Vec<Option<isize>>>>,
+    pub mutex_need: Vec<Option<Vec<Option<isize>>>>, // TODO, how to initialize it?
+    pub sem_avail: Vec<Option<isize>>,
+    pub sem_alloc: Vec<Option<Vec<Option<isize>>>>,
+    pub sem_need: Vec<Option<Vec<Option<isize>>>>, // TODO, how to initialize it?
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +128,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    en_deadlock_detect: false,
+                    mutex_avail: Vec::new(),
+                    mutex_alloc: Vec::new(),
+                    mutex_need: Vec::new(),
+                    sem_avail: Vec::new(),
+                    sem_alloc: Vec::new(),
+                    sem_need: Vec::new(),
                 })
             },
         });
@@ -144,6 +160,10 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+        process_inner.mutex_alloc.push(Some(Vec::new()));
+        process_inner.mutex_need.push(Some(Vec::new()));
+        process_inner.sem_alloc.push(Some(Vec::new()));
+        process_inner.sem_need.push(Some(Vec::new()));
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
@@ -245,6 +265,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    en_deadlock_detect: parent.en_deadlock_detect,
+                    mutex_avail: Vec::new(),
+                    mutex_alloc: Vec::new(),
+                    mutex_need: Vec::new(),
+                    sem_avail: Vec::new(),
+                    sem_alloc: Vec::new(),
+                    sem_need: Vec::new(),
                 })
             },
         });
@@ -267,6 +294,10 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
         child_inner.tasks.push(Some(Arc::clone(&task)));
+        child_inner.mutex_alloc.push(Some(Vec::new()));
+        child_inner.mutex_need.push(Some(Vec::new()));
+        child_inner.sem_alloc.push(Some(Vec::new()));
+        child_inner.sem_need.push(Some(Vec::new()));
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
         let task_inner = task.inner_exclusive_access();
@@ -281,5 +312,62 @@ impl ProcessControlBlock {
     /// get pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+    /// deadlock detection implemented with Banker's Algorithm,
+    /// return whether the request is safe or not
+    pub fn detect_deadlock(&self, for_mutex: bool, res_id: usize) -> bool {
+        let inner = self.inner_exclusive_access();
+        let mut work = if for_mutex {
+            inner.mutex_avail.clone()
+        } else {
+            inner.sem_avail.clone()
+        };
+        let alloc = if for_mutex {
+            &inner.mutex_alloc
+        } else {
+            &inner.sem_alloc
+        };
+        let need = if for_mutex {
+            &inner.mutex_need
+        } else {
+            &inner.sem_need
+        };
+        let mut finish: Vec<Option<bool>> = vec![None; inner.tasks.len()];
+        for (i, task) in inner.tasks.iter().enumerate() {
+            if task.is_some() {
+                finish[i] = Some(false);
+            }
+        }
+        loop {
+            // step 2
+            let mut find = false;
+            for (i, task) in inner.tasks.iter().enumerate() {
+                if task.is_some() {
+                    if finish[i].unwrap() == false
+                        && need[i].as_ref().unwrap()[res_id].unwrap() <= work[res_id].unwrap()
+                    {
+                        // step 3
+                        find = true;
+                        *(work[res_id].as_mut().unwrap()) +=
+                            alloc[i].as_ref().unwrap()[res_id].unwrap();
+                        finish[i] = Some(true);
+                        break;
+                    }
+                }
+            }
+            // step 4
+            if find == false {
+                for i in 0..finish.len() {
+                    if let Some(val) = finish[i] {
+                        if val == false {
+                            // unsafe
+                            return false;
+                        }
+                    }
+                }
+                // safe
+                return true;
+            }
+        }
     }
 }
