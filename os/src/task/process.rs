@@ -52,12 +52,12 @@ pub struct ProcessControlBlockInner {
     /// enable deadlock detection?
     pub en_deadlock_detect: bool,
     /// Information for Banker's Algorithm
-    pub mutex_avail: Vec<Option<isize>>,
-    pub mutex_alloc: Vec<Option<Vec<Option<isize>>>>,
-    pub mutex_need: Vec<Option<Vec<Option<isize>>>>, // TODO, how to initialize it?
-    pub sem_avail: Vec<Option<isize>>,
-    pub sem_alloc: Vec<Option<Vec<Option<isize>>>>,
-    pub sem_need: Vec<Option<Vec<Option<isize>>>>, // TODO, how to initialize it?
+    pub mutex_avail: Vec<Option<u8>>,
+    pub mutex_alloc: Vec<Option<Vec<Option<u8>>>>,
+    pub mutex_need: Vec<Option<Vec<Option<u8>>>>, // TODO, how to initialize it?
+    pub sem_avail: Vec<Option<u8>>,
+    pub sem_alloc: Vec<Option<Vec<Option<u8>>>>,
+    pub sem_need: Vec<Option<Vec<Option<u8>>>>, // TODO, how to initialize it?
 }
 
 impl ProcessControlBlockInner {
