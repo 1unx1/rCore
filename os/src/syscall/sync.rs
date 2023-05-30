@@ -92,22 +92,12 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         .as_mut()
         .unwrap()) += 1;
 
-    // // simply check
-    // if process_inner.mutex_avail[mutex_id].unwrap() < 1 {
-    //     println!(
-    //         "[Thread {}][Mutex {}][Unsafe]: available < request",
-    //         tid, mutex_id
-    //     );
-    //     return -0xDEAD;
-    // }
-
     let enable = process_inner.en_deadlock_detect;
     drop(process_inner);
 
-    if enable == false || process.detect_deadlock(true, mutex_id) {
+    if enable == false || process.detect_deadlock_for_mutex() {
         // safe request
         drop(process);
-        // println!("[Thread {}][Mutex {}][Safe]: a safe request", tid, mutex_id);
         mutex.lock();
         let process = current_process();
         let mut process_inner = process.inner_exclusive_access();
@@ -121,7 +111,6 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         0
     } else {
         // unsafe request
-        // println!("[Thread {}][Mutex {}][Unsafe]: deadlock", tid, mutex_id);
         -0xDEAD
     }
 }
@@ -141,11 +130,11 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     );
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
+    let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     *(process_inner.mutex_avail[mutex_id].as_mut().unwrap()) += 1;
     *(process_inner.mutex_alloc[tid].as_mut().unwrap()[mutex_id]
         .as_mut()
         .unwrap()) -= 1;
-    let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
     mutex.unlock();
@@ -245,21 +234,11 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
         .as_mut()
         .unwrap()) += 1;
 
-    // // simply check
-    // if process_inner.sem_avail[sem_id].unwrap() < 1 {
-    //     println!(
-    //         "[Thread {}][Sem {}][Unsafe]: available < request",
-    //         tid, sem_id
-    //     );
-    //     return -0xDEAD;
-    // }
-
     let enable = process_inner.en_deadlock_detect;
     drop(process_inner);
 
-    if enable == false || process.detect_deadlock(false, sem_id) {
+    if enable == false || process.detect_deadlock_for_semaphore() {
         // safe request
-        // println!("[Thread {}][Sem {}][Safe]: a safe request", tid, sem_id);
         sem.down();
         let mut process_inner = process.inner_exclusive_access();
         *(process_inner.sem_avail[sem_id].as_mut().unwrap()) -= 1;
@@ -272,7 +251,6 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
         0
     } else {
         // unsafe request
-        // println!("[Thread {}][Sem {}][Unsafe]: deadlock", tid, sem_id);
         -0xDEAD
     }
 }

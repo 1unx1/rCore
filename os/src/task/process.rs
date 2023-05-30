@@ -313,25 +313,14 @@ impl ProcessControlBlock {
     pub fn getpid(&self) -> usize {
         self.pid.0
     }
-    /// deadlock detection implemented with Banker's Algorithm,
+    /// deadlock detection for mutex implemented with Banker's Algorithm,
     /// return whether the request is safe or not
-    pub fn detect_deadlock(&self, for_mutex: bool, res_id: usize) -> bool {
+    pub fn detect_deadlock_for_mutex(&self) -> bool {
+        // step 1
         let inner = self.inner_exclusive_access();
-        let mut work = if for_mutex {
-            inner.mutex_avail.clone()
-        } else {
-            inner.sem_avail.clone()
-        };
-        let alloc = if for_mutex {
-            &inner.mutex_alloc
-        } else {
-            &inner.sem_alloc
-        };
-        let need = if for_mutex {
-            &inner.mutex_need
-        } else {
-            &inner.sem_need
-        };
+        let mut work = inner.mutex_avail.clone();
+        let alloc = &inner.mutex_alloc;
+        let need = &inner.mutex_need;
         let mut finish: Vec<Option<bool>> = vec![None; inner.tasks.len()];
         for (i, task) in inner.tasks.iter().enumerate() {
             if task.is_some() {
@@ -342,14 +331,83 @@ impl ProcessControlBlock {
             // step 2
             let mut find = false;
             for (i, task) in inner.tasks.iter().enumerate() {
-                if task.is_some() {
-                    if finish[i].unwrap() == false
-                        && need[i].as_ref().unwrap()[res_id].unwrap() <= work[res_id].unwrap()
-                    {
+                if task.is_some() && finish[i].unwrap() == false {
+                    let mut safe_thread = true;
+                    for (j, res) in inner.mutex_list.iter().enumerate() {
+                        if res.is_some() {
+                            if need[i].as_ref().unwrap()[j].unwrap() > work[j].unwrap() {
+                                safe_thread = false;
+                                break;
+                            }
+                        }
+                    }
+                    if safe_thread {
                         // step 3
                         find = true;
-                        *(work[res_id].as_mut().unwrap()) +=
-                            alloc[i].as_ref().unwrap()[res_id].unwrap();
+                        for (j, res) in inner.mutex_list.iter().enumerate() {
+                            if res.is_some() {
+                                *(work[j].as_mut().unwrap()) +=
+                                    alloc[i].as_ref().unwrap()[j].unwrap();
+                            }
+                        }
+                        finish[i] = Some(true);
+                        break;
+                    }
+                }
+            }
+            // step 4
+            if find == false {
+                for i in 0..finish.len() {
+                    if let Some(val) = finish[i] {
+                        if val == false {
+                            // unsafe
+                            return false;
+                        }
+                    }
+                }
+                // safe
+                return true;
+            }
+        }
+    }
+    /// deadlock detection for semaphore implemented with Banker's Algorithm,
+    /// return whether the request is safe or not
+    pub fn detect_deadlock_for_semaphore(&self) -> bool {
+        // step 1
+        let inner = self.inner_exclusive_access();
+        let mut work = inner.sem_avail.clone();
+        let alloc = &inner.sem_alloc;
+        let need = &inner.sem_need;
+        let mut finish: Vec<Option<bool>> = vec![None; inner.tasks.len()];
+        for (i, task) in inner.tasks.iter().enumerate() {
+            if task.is_some() {
+                finish[i] = Some(false);
+            }
+        }
+        loop {
+            // step 2
+            let mut find = false;
+            for (i, task) in inner.tasks.iter().enumerate() {
+                if task.is_some() && finish[i].unwrap() == false {
+                    let mut safe_thread = true;
+                    for (j, res) in inner.semaphore_list.iter().enumerate() {
+                        if res.is_some() {
+                            if need[i].as_ref().unwrap()[j].unwrap() > work[j].unwrap() {
+                                safe_thread = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if safe_thread {
+                        // step 3
+                        find = true;
+                        for (j, res) in inner.semaphore_list.iter().enumerate() {
+                            if res.is_some() {
+                                *(work[j].as_mut().unwrap()) +=
+                                    alloc[i].as_ref().unwrap()[j].unwrap();
+                            }
+                        }
                         finish[i] = Some(true);
                         break;
                     }
