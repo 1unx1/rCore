@@ -98,7 +98,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     if enable == false || process.detect_deadlock_for_mutex() {
         // safe request
         drop(process);
-        println!("[Thread {}][Mutex {}][Safe]: a safe request", tid, mutex_id);
+        // println!("[Thread {}][Mutex {}][Safe]: a safe request", tid, mutex_id);
         mutex.lock();
         let process = current_process();
         let mut process_inner = process.inner_exclusive_access();
@@ -112,7 +112,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         0
     } else {
         // unsafe request
-        println!("[Thread {}][Mutex {}][Unsafe]: deadlock", tid, mutex_id);
+        // println!("[Thread {}][Mutex {}][Unsafe]: deadlock", tid, mutex_id);
         -0xDEAD
     }
 }
@@ -241,7 +241,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
 
     if enable == false || process.detect_deadlock_for_semaphore() {
         // safe request
-        println!("[Thread {}][Sem {}][Safe]: a safe request", tid, sem_id);
+        // println!("[Thread {}][Sem {}][Safe]: a safe request", tid, sem_id);
         sem.down();
         let mut process_inner = process.inner_exclusive_access();
         *(process_inner.sem_avail[sem_id].as_mut().unwrap()) -= 1;
@@ -255,7 +255,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
         0
     } else {
         // unsafe request
-        println!("[Thread {}][Sem {}][Unsafe]: deadlock", tid, sem_id);
+        // println!("[Thread {}][Sem {}][Unsafe]: deadlock", tid, sem_id);
         -0xDEAD
     }
 }
